@@ -28,81 +28,73 @@ export default function MintButton({ product }: { product: Product }) {
 
     setIsMinting(true);
     try {
-      if (!user?.wallet?.address) {
-        throw new Error('No wallet connected');
-      }
+      const collectionMap: any = {
+        'HUGMUG': 0,
+        'STRAPBOX': 1,
+        'CAMPLAMP': 2
+      };
 
-      // Check if contract address is configured
-      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
-      if (!contractAddress) {
-        throw new Error('Contract address not configured');
-      }
+      const colorMap: any = {
+        'HUGMUG': {
+          'Black': 0,
+          'White': 1,
+          'Blue': 2,
+          'Pink': 3
+        },
+        'STRAPBOX': {
+          'Natural': 0,
+          'Black': 1
+        },
+        'CAMPLAMP': {
+          'Port': 0
+        }
+      };
 
-      // Get the provider and signer
-      if (!user.wallet) {
-        throw new Error('No wallet available');
-      }
+      // parameters from product
+      const serialNumber = BigInt(product.decodedToken?.n || 0);
+      const collection = collectionMap[product.decodedToken?.t || ''] || 0;
+      const color = colorMap[product.decodedToken?.c || ''] || 0;
+
+      const response = await fetch('/api/mint', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          serialNumber: Number(serialNumber),
+          color,
+          collection,
+        }),
+      });
+
+      const data = await response.json();
       
-      const provider = await user.wallet.getEthereumProvider();
-      if (!provider) {
-        throw new Error('Failed to get provider');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to mint');
       }
-      const ethersProvider = new ethers.providers.Web3Provider(provider);
-      const signer = ethersProvider.getSigner();
-      
-      // Create contract instance
-      const contract = new ethers.Contract(
-        contractAddress,
-        ['function mint() public'], // Add your actual contract ABI here
-        signer
-      );
 
-      // Calculate gas limit (you may want to adjust this)
-      const gasLimit = 600000;
+      // Success!
+      setIsMinting(false);
 
-      // Send the transaction
-      const tx = await contract.mint({ gasLimit });
-      console.log("Transaction sent:", tx.hash);
-
-      // Wait for transaction confirmation
-      const receipt = await tx.wait();
-      console.log("Transaction confirmed in block:", receipt.blockNumber);
-
-      // Show success message
-      alert('Successfully minted!');
     } catch (error: any) {
-      console.error('Error minting:', error);
-      
-      // Handle specific error cases
-      if (error.code === 'INSUFFICIENT_FUNDS') {
-        alert('Insufficient funds to complete the transaction');
-      } else if (error.code === 4001) {
-        alert('Transaction rejected by user');
-      } else if (error.message.includes('execution reverted')) {
-        alert(error.error?.message || 'Contract error occurred');
-      } else {
-        alert('Failed to mint. Please check console for details.');
-      }
-    } finally {
+      console.error('Minting error:', error);
       setIsMinting(false);
     }
   };
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="p-8 rounded-lg shadow-lg max-w-md w-full bg-white">
-          <p className="text-center">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-center">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="p-8 rounded-lg shadow-lg max-w-md w-full bg-white">
-        <h1 className="text-2xl font-bold mb-4">{product.decodedToken?.t}</h1>
-        <div className="aspect-square relative mb-4 bg-gray-200 rounded-lg overflow-hidden">
+    <div className="flex items-center justify-center p-8">
+      <div className="w-full max-w-md px-4">
+        <h1 className="text-2xl mb-6 text-center">{product.decodedToken?.t}</h1>
+        <div className="aspect-square relative mb-6 w-64 mx-auto">
           <Image
             src={product.imageUrl}
             alt={product.id}
@@ -111,22 +103,15 @@ export default function MintButton({ product }: { product: Product }) {
             priority
           />
         </div>
-        <div className="mb-4 space-y-2">
-          <p className="text-lg font-semibold">Details:</p>
-          <p className="text-gray-700">Product: {product.decodedToken?.t}</p>
-          <p className="text-gray-700">Color: {product.decodedToken?.c}</p>
-          <p className="text-gray-700">Number: #{product.decodedToken?.n}</p>
+        <div className="mb-6 space-y-1 text-center">
+          <p>Product: {product.decodedToken?.t}</p>
+          <p>Color: {product.decodedToken?.c}</p>
+          <p>Number: #{product.decodedToken?.n}</p>
         </div>
         <button
           onClick={handleMint}
-          disabled={isMinting}
-          className={`w-full py-2 px-4 rounded ${
-            isMinting
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-blue-500 hover:bg-blue-600'
-          } text-white font-semibold transition-colors`}
         >
-          {!authenticated ? 'Connect Wallet' : (isMinting ? 'Minting...' : 'Mint Now')}
+        Mint Now
         </button>
       </div>
     </div>

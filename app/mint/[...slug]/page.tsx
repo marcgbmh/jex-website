@@ -1,9 +1,8 @@
-'use client';
+'use server';
 
 import Image from "next/image";
-import { useState, use } from 'react';
-import { decodeToken } from './token';
 import MintButton from './mint-button';
+import { verifyTokenSignature, decodeToken } from '../../api/token/route';
 
 interface Product {
   id: string;
@@ -16,11 +15,16 @@ interface Product {
   };
 }
 
-const parseProductFromUrl = (slug: string[]): Product | null => {
+const parseProductFromUrl = async (slug: string[]): Promise<Product | null> => {
   try {
     // Get the token from the URL
     const token = slug[0];
     if (!token) return null;
+
+    // Server-side token verification
+    if (!verifyTokenSignature(token)) {
+      throw new Error('FABRICATED_TOKEN');
+    }
 
     // Decode the token
     const decoded = decodeToken(token);
@@ -30,22 +34,43 @@ const parseProductFromUrl = (slug: string[]): Product | null => {
     return {
       id: `${decoded.t}-${decoded.c}-${decoded.n.toString().padStart(6, '0')}`,
       category: decoded.c,
-      imageUrl: `/products/${decoded.t}-${decoded.c}-${decoded.n.toString().padStart(6, '0')}.png`,
+      imageUrl: `/products/${decoded.t}.png`,
       decodedToken: decoded
     };
   } catch (error) {
-    console.error('Error parsing product from URL:', error);
+    if (error instanceof Error && error.message === 'FABRICATED_TOKEN') {
+      throw error;
+    }
     return null;
   }
 };
 
-export default function MintPage({
+export default async function MintPage({
   params,
 }: {
-  params: Promise<{ slug: string[] }>;
+  params: { slug: string[] };
 }) {
-  const resolvedParams = use(params);
-  const product = parseProductFromUrl(resolvedParams.slug);
+  let error = null;
+  let product = null;
+  
+  try {
+    product = await parseProductFromUrl(params.slug);
+  } catch (e) {
+    if (e instanceof Error && e.message === 'FABRICATED_TOKEN') {
+      error = 'FABRICATED_TOKEN';
+    }
+  }
+
+  if (error === 'FABRICATED_TOKEN') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Invalid Token</h1>
+          <p className="text-gray-600">This token appears to be fabricated or tampered with.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
