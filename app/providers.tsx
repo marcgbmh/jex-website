@@ -16,26 +16,6 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <PrivyProvider
       appId={PRIVY_APP_ID}
-      config={{
-        loginMethods: ['wallet', 'email'],
-        appearance: {
-          theme: 'light',
-          accentColor: '#000000',
-          showWalletLoginFirst: true,
-        },
-        defaultChain: {
-          name: 'Sepolia',
-          id: 11155111,
-          rpcUrls: ['https://eth-sepolia.g.alchemy.com/v2/demo']
-        },
-        supportedChains: [
-          {
-            name: 'Sepolia',
-            id: 11155111,
-            rpcUrls: ['https://eth-sepolia.g.alchemy.com/v2/demo']
-          }
-        ]
-      }}
     >
       {children}
     </PrivyProvider>
