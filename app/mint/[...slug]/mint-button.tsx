@@ -1,14 +1,18 @@
-'use client';
+"use client";
 
 import Image from "next/image";
-import { useState } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
-import { ethers } from 'ethers';
+import { useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import { ethers } from "ethers";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { SendHorizontal } from "lucide-react";
 
 interface Product {
   id: string;
   category: string;
   imageUrl: string;
+  token: string;
   decodedToken?: {
     n: number;
     c: string;
@@ -18,68 +22,70 @@ interface Product {
 
 export default function MintButton({ product }: { product: Product }) {
   const [isMinting, setIsMinting] = useState(false);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [inputAddress, setInputAddress] = useState("");
+  const [error, setError] = useState("");
   const { login, authenticated, ready, user } = usePrivy();
 
+  // Get the effective address - prioritize manual input over connected wallet
+  const effectiveAddress = walletAddress || user?.wallet?.address;
+
+  const formatAddress = (address: string) => {
+    if (!address) return "";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
   const handleMint = async () => {
-    if (!authenticated) {
+    if (!authenticated && !walletAddress) {
       login();
       return;
     }
 
     setIsMinting(true);
     try {
-      const collectionMap: any = {
-        'HUGMUG': 0,
-        'STRAPBOX': 1,
-        'CAMPLAMP': 2
-      };
+      console.log("Sending token:", product.token);
 
-      const colorMap: any = {
-        'HUGMUG': {
-          'Black': 0,
-          'White': 1,
-          'Blue': 2,
-          'Pink': 3
-        },
-        'STRAPBOX': {
-          'Natural': 0,
-          'Black': 1
-        },
-        'CAMPLAMP': {
-          'Port': 0
-        }
-      };
-
-      // parameters from product
-      const serialNumber = BigInt(product.decodedToken?.n || 0);
-      const collection = collectionMap[product.decodedToken?.t || ''] || 0;
-      const color = colorMap[product.decodedToken?.c || ''] || 0;
-
-      const response = await fetch('/api/mint', {
-        method: 'POST',
+      const response = await fetch("/api/mint", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          serialNumber: Number(serialNumber),
-          color,
-          collection,
+          token: product.token,
+          walletAddress: authenticated ? user?.wallet?.address : walletAddress,
         }),
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to mint');
+        throw new Error(data.error || "Failed to mint");
       }
 
       // Success!
       setIsMinting(false);
-
     } catch (error: any) {
-      console.error('Minting error:', error);
+      console.error("Minting error:", error);
       setIsMinting(false);
     }
+  };
+
+  const handleAddressSubmit = () => {
+    try {
+      if (ethers.isAddress(inputAddress)) {
+        setWalletAddress(inputAddress);
+        setError("");
+      } else {
+        setError("Invalid Ethereum address");
+      }
+    } catch (e) {
+      setError("Invalid Ethereum address");
+    }
+  };
+
+  const handleAddressClick = () => {
+    setWalletAddress("");
+    setInputAddress("");
   };
 
   if (!ready) {
@@ -91,28 +97,80 @@ export default function MintButton({ product }: { product: Product }) {
   }
 
   return (
-    <div className="flex items-center justify-center p-8">
-      <div className="w-full max-w-md px-4">
-        <h1 className="text-2xl mb-6 text-center">{product.decodedToken?.t}</h1>
-        <div className="aspect-square relative mb-6 w-64 mx-auto">
-          <Image
-            src={product.imageUrl}
-            alt={product.id}
-            fill
-            className="object-cover"
-            priority
-          />
+    <div className="min-h-[90vh] flex items-center justify-center flex-col">
+      <div className="">
+        <div className="flex items-center justify-center gap-8 ">
+          <div>
+            <div className="aspect-square relative mb-6 w-64">
+              <Image
+                src={product.imageUrl}
+                alt={product.id}
+                fill
+                className="object-cover"
+                priority
+              />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-2xl mb-6">
+              {product.decodedToken?.t?.toUpperCase()}
+            </h1>
+            <div className="mb-6 space-y-1 ">
+              <p>Product: {product.decodedToken?.t}</p>
+              <p>Color: {product.decodedToken?.c}</p>
+              <p>Number: #{product.decodedToken?.n}</p>
+            </div>
+          </div>
         </div>
-        <div className="mb-6 space-y-1 text-center">
-          <p>Product: {product.decodedToken?.t}</p>
-          <p>Color: {product.decodedToken?.c}</p>
-          <p>Number: #{product.decodedToken?.n}</p>
+        <div className=" flex flex-col gap-4 w-full">
+          {!authenticated && !walletAddress ? (
+            <div className="flex flex-col gap-4 ">
+              <p className="font-medium">Claim</p>
+              <div className="flex gap-2 flex-col">
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Enter your address"
+                    value={inputAddress}
+                    onChange={(e) => {
+                      setInputAddress(e.target.value);
+                      setError("");
+                    }}
+                  />
+                  <Button
+                    onClick={handleAddressSubmit}
+                    className="border border-black p-2 px-4"
+                  >
+                    Enter
+                  </Button>
+                </div>
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+              </div>
+              <p className="text-center">or</p>
+              <Button onClick={login} className="border border-black p-2 px-4 ">
+                Login
+              </Button>
+            </div>
+          ) : (
+            <div>
+              <p className="font-medium mb-4">
+                Claim with{" "}
+                <span
+                  className="hover:opacity-50 cursor-pointer transition-opacity"
+                  onClick={handleAddressClick}
+                >
+                  {formatAddress(effectiveAddress)}
+                </span>
+              </p>
+              <Button
+                onClick={handleMint}
+                className="border border-black p-2 px-4 w-full"
+              >
+                {isMinting ? "Claiming..." : `Claim`}
+              </Button>
+            </div>
+          )}
         </div>
-        <button
-          onClick={handleMint}
-        >
-        Mint Now
-        </button>
       </div>
     </div>
   );
