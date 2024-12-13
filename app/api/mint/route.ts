@@ -2,28 +2,67 @@ import { NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { decodeToken, verifyTokenSignature } from "../token/route";
 
-const WALLET_ADDRESS = "0x9B8082423Cca2c0ddcf447A765890b6FD0a6069a";
-
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { token } = body;
+    const { token, walletAddress } = body;
 
     if (!token) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 });
     }
 
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "Wallet address is required" },
+        { status: 400 }
+      );
+    }
+
+    console.log("Received token:", token);
+
     // Verify token signature first
     if (!verifyTokenSignature(token)) {
-      return NextResponse.json({ error: "Invalid token signature" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Invalid token signature" },
+        { status: 401 }
+      );
     }
 
     const decodedToken = decodeToken(token);
     if (!decodedToken) {
-      return NextResponse.json({ error: "Invalid token format" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid token format" },
+        { status: 400 }
+      );
     }
 
-    const { n: serialNumber, t: collection, c: color } = decodedToken;
+    const { n: serialNumber, t: collectionName, c: colorName } = decodedToken;
+
+    // Map collection and color names to their numeric values
+    const collectionMap: { [key: string]: number } = {
+      HUGMUG: 0,
+      STRAPBOX: 1,
+      CAMPLAMP: 2,
+    };
+
+    const colorMap: { [key: string]: { [key: string]: number } } = {
+      HUGMUG: {
+        Black: 0,
+        White: 1,
+        Blue: 2,
+        Pink: 3,
+      },
+      STRAPBOX: {
+        Natural: 0,
+        Black: 1,
+      },
+      CAMPLAMP: {
+        Port: 0,
+      },
+    };
+
+    const collection = collectionMap[collectionName] || 0;
+    const color = colorMap[collectionName]?.[colorName] || 0;
 
     const provider = new ethers.JsonRpcProvider(
       process.env.NEXT_PUBLIC_RPC_URL,
@@ -57,7 +96,7 @@ export async function POST(request: Request) {
     console.log(provider);
 
     const tx = await contract.mintFor(
-      WALLET_ADDRESS,
+      walletAddress,
       collection,
       serialNumber,
       color,
