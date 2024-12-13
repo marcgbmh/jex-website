@@ -6,7 +6,16 @@ import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { SendHorizontal } from "lucide-react";
+import { formatAddress } from "@/lib/utils";
+
+const formatProductName = (name: string): string => {
+  const productNames: { [key: string]: string } = {
+    HUGMUG: "Hugmug",
+    STRAPBOX: "Strapbox",
+    CAMPLAMP: "Camplamp",
+  };
+  return productNames[name] || name;
+};
 
 interface Product {
   id: string;
@@ -25,6 +34,9 @@ export default function MintButton({ product }: { product: Product }) {
   const [walletAddress, setWalletAddress] = useState("");
   const [inputAddress, setInputAddress] = useState("");
   const [error, setError] = useState("");
+  const [mintSuccess, setMintSuccess] = useState(false);
+  const [txHash, setTxHash] = useState("");
+  const [tokenId, setTokenId] = useState("");
   const { login, authenticated, ready, user } = usePrivy();
 
   // Get the effective address - prioritize manual input over connected wallet
@@ -63,6 +75,9 @@ export default function MintButton({ product }: { product: Product }) {
       }
 
       // Success!
+      setMintSuccess(true);
+      setTxHash(data.txHash);
+      setTokenId(data.tokenId);
       setIsMinting(false);
     } catch (error: any) {
       console.error("Minting error:", error);
@@ -76,10 +91,10 @@ export default function MintButton({ product }: { product: Product }) {
         setWalletAddress(inputAddress);
         setError("");
       } else {
-        setError("Invalid Ethereum address");
+        setError("Please enter valid Ethereum address");
       }
     } catch (e) {
-      setError("Invalid Ethereum address");
+      setError("Please enter valid Ethereum address");
     }
   };
 
@@ -113,12 +128,51 @@ export default function MintButton({ product }: { product: Product }) {
           </div>
           <div>
             <h1 className="text-2xl mb-6">
-              {product.decodedToken?.t?.toUpperCase()}
+              {product.decodedToken?.t
+                ? formatProductName(product.decodedToken.t)
+                : ""}
             </h1>
             <div className="mb-6 space-y-1 ">
-              <p>Product: {product.decodedToken?.t}</p>
-              <p>Color: {product.decodedToken?.c}</p>
-              <p>Number: #{product.decodedToken?.n}</p>
+              <p>
+                Product:{" "}
+                {product.decodedToken?.t
+                  ? formatProductName(product.decodedToken.t)
+                  : ""}
+              </p>
+              <p>Color: {product.decodedToken?.c ?? ""}</p>
+              <p>Number: #{product.decodedToken?.n ?? ""}</p>
+              {mintSuccess && (
+                <>
+                  <p>Owner: {formatAddress(effectiveAddress ?? "")}</p>
+                  <div className="mt-4">
+                    <p className="font-bold text-green-600 mb-2">
+                      Congratulations! 🎉
+                    </p>
+                    <div className="space-y-2">
+                      {txHash && (
+                        <a
+                          href={`https://etherscan.io/tx/${txHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline block"
+                        >
+                          View on Etherscan
+                        </a>
+                      )}
+                      {tokenId && (
+                        <a
+                          href={`https://opensea.io/assets/ethereum/${process.env.NEXT_PUBLIC_CONTRACT_ADDRESS}/${tokenId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline block"
+                        >
+                          View on OpenSea
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -154,12 +208,12 @@ export default function MintButton({ product }: { product: Product }) {
           ) : (
             <div>
               <p className="font-medium mb-4">
-                Claim with{" "}
+                Claim to{" "}
                 <span
                   className="hover:opacity-50 cursor-pointer transition-opacity"
                   onClick={handleAddressClick}
                 >
-                  {formatAddress(effectiveAddress)}
+                  {formatAddress(effectiveAddress ?? "")}
                 </span>
               </p>
               <Button
