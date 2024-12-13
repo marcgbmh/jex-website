@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Input } from "@/components/ui/input";
@@ -12,16 +12,6 @@ enum CollectionId {
   HUGMUG = 0,
   STRAPBOX = 1,
   CAMPLAMP = 2,
-}
-
-enum ColorId {
-  HUGMUG_BLACK = 0,
-  HUGMUG_WHITE = 1,
-  HUGMUG_BLUE = 2,
-  HUGMUG_PINK = 3,
-  STRAPBOX_NATURAL = 0,
-  STRAPBOX_BLACK = 1,
-  CAMPLAMP_PORT = 0,
 }
 
 // Types
@@ -174,10 +164,7 @@ export default function MintButton({ product }: MintButtonProps) {
   const [txHash, setTxHash] = useState("");
   const [tokenId, setTokenId] = useState("");
   const [tokenExists, setTokenExists] = useState(false);
-  const [tokenOwner, setTokenOwner] = useState("");
   const { login, authenticated, ready, user } = usePrivy();
-  const initialLoadRef = useRef(true);
-
   const effectiveAddress = walletAddress || user?.wallet?.address;
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
 
@@ -191,7 +178,6 @@ export default function MintButton({ product }: MintButtonProps) {
     );
     const contractABI = [
       "function exists(uint64 collection, uint64 serialNumber) public view returns (bool)",
-      "function ownerOf(uint256 tokenId) public view returns (address)",
       "function getTokenId(uint64 collection, uint64 serialNumber) public pure returns (uint256)",
     ];
 
@@ -217,18 +203,16 @@ export default function MintButton({ product }: MintButtonProps) {
         if (exists) {
           setTokenExists(true);
           const tokenId = await contract.getTokenId(collectionId, serialNumber);
-          const owner = await contract.ownerOf(tokenId);
-          setTokenOwner(owner);
+          setTokenId(tokenId.toString());
         }
       })
       .catch(console.error);
-  }, []); // Empty deps array to only run on mount
+  }, [contractAddress, isMinting, mintSuccess, product.decodedToken]);
 
   // Set token state on mint success
   useEffect(() => {
     if (mintSuccess && effectiveAddress) {
       setTokenExists(true);
-      setTokenOwner(effectiveAddress);
     }
   }, [mintSuccess, effectiveAddress]);
 

@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { verifyTokenSignature, decodeToken } from "@/utils/token";
 
+interface ContractError extends Error {
+  code?: string;
+  data?: unknown;
+  reason?: string;
+  transaction?: unknown;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -124,18 +131,19 @@ export async function POST(request: Request) {
       txHash: receipt.transactionHash,
       tokenId: tokenId.toString(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const contractError = error as ContractError;
     console.error("Minting error:", {
-      error,
-      message: error.message,
-      code: error.code,
-      data: error.data,
-      reason: error.reason,
-      transaction: error.transaction,
+      error: contractError,
+      message: contractError.message,
+      code: contractError.code,
+      data: contractError.data,
+      reason: contractError.reason,
+      transaction: contractError.transaction,
     });
 
     // Check if the error is because the token already exists
-    if (error.code === "CALL_EXCEPTION") {
+    if (contractError.code === "CALL_EXCEPTION") {
       return NextResponse.json(
         { error: "Token already minted or not available" },
         { status: 400 }
@@ -143,7 +151,12 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to mint" },
+      {
+        error:
+          contractError instanceof Error
+            ? contractError.message
+            : "Failed to mint",
+      },
       { status: 500 }
     );
   }
