@@ -3,6 +3,16 @@
 import Image from "next/image";
 import MintButton from "./mint-button";
 import { verifyTokenSignature, decodeToken } from "../../api/token/route";
+import { Metadata, ResolvingMetadata } from "next";
+
+const formatProductName = (name: string): string => {
+  const productNames: { [key: string]: string } = {
+    HUGMUG: "Hugmug",
+    STRAPBOX: "Strapbox",
+    CAMPLAMP: "Camplamp",
+  };
+  return productNames[name] || name;
+};
 
 interface Product {
   id: string;
@@ -46,6 +56,24 @@ const parseProductFromUrl = async (slug: string[]): Promise<Product | null> => {
     return null;
   }
 };
+
+export async function generateMetadata(
+  { params }: { params: { slug: string[] } },
+  parent: ResolvingMetadata
+): Promise<Metadata> {
+  const product = await parseProductFromUrl(params.slug);
+
+  if (!product || !product.decodedToken) {
+    return {
+      title: "Invalid Product - Jex",
+    };
+  }
+
+  const productName = formatProductName(product.decodedToken.t);
+  return {
+    title: `${productName} - Jex`,
+  };
+}
 
 export default async function MintPage({
   params,
