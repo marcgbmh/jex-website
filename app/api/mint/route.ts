@@ -89,11 +89,19 @@ export async function POST(request: Request) {
       contractAddress,
       [
         "function mintFor(address recipient, uint64 collection, uint64 serialNumber, uint64 color) public",
+        "function getTokenId(uint64 collection, uint64 serialNumber) public pure returns (uint256)",
       ],
       wallet
     );
 
     console.log(provider);
+
+    console.log("Minting with params:", {
+      walletAddress,
+      collection,
+      serialNumber,
+      color,
+    });
 
     const tx = await contract.mintFor(
       walletAddress,
@@ -103,14 +111,37 @@ export async function POST(request: Request) {
       { gasLimit: 600000 }
     );
 
+    console.log("Transaction sent:", tx.hash);
+
     const receipt = await tx.wait();
+    console.log("Transaction receipt:", receipt);
+
+    // Calculate tokenId
+    const tokenId = await contract.getTokenId(collection, serialNumber);
 
     return NextResponse.json({
       success: true,
       txHash: receipt.transactionHash,
+      tokenId: tokenId.toString(),
     });
-  } catch (error: Error | ethers.ErrorDescription | unknown) {
-    console.error("Minting error:", error);
+  } catch (error: any) {
+    console.error("Minting error:", {
+      error,
+      message: error.message,
+      code: error.code,
+      data: error.data,
+      reason: error.reason,
+      transaction: error.transaction,
+    });
+
+    // Check if the error is because the token already exists
+    if (error.code === "CALL_EXCEPTION") {
+      return NextResponse.json(
+        { error: "Token already minted or not available" },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to mint" },
       { status: 500 }

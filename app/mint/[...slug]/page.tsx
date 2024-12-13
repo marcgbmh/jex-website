@@ -94,7 +94,7 @@ export default async function MintPage({
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-[90vh]">
       <MintButton product={product} />
     </div>
   );
