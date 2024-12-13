@@ -6,7 +6,6 @@ import { usePrivy } from "@privy-io/react-auth";
 import { ethers } from "ethers";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { formatAddress } from "@/lib/utils";
 
 const formatProductName = (name: string): string => {
   const productNames: { [key: string]: string } = {
@@ -79,7 +78,7 @@ export default function MintButton({ product }: { product: Product }) {
       setTxHash(data.txHash);
       setTokenId(data.tokenId);
       setIsMinting(false);
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
       console.error("Minting error:", error);
       setIsMinting(false);
     }
@@ -93,7 +92,7 @@ export default function MintButton({ product }: { product: Product }) {
       } else {
         setError("Please enter valid Ethereum address");
       }
-    } catch (e) {
+    } catch {
       setError("Please enter valid Ethereum address");
     }
   };

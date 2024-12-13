@@ -1,7 +1,6 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AccountPage() {
   const { user } = usePrivy();

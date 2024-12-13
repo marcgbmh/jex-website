@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { usePrivy } from "@privy-io/react-auth";
-import { Power, User } from "lucide-react";
+import { Power } from "lucide-react";
 
 export function Nav() {
   const { login, authenticated, logout } = usePrivy();

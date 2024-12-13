@@ -1,9 +1,6 @@
-"use server";
-
-import Image from "next/image";
 import MintButton from "./mint-button";
-import { verifyTokenSignature, decodeToken } from "../../api/token/route";
-import { Metadata, ResolvingMetadata } from "next";
+import { verifyTokenSignature, decodeToken } from "@/utils/token";
+import { Metadata } from "next";
 
 const formatProductName = (name: string): string => {
   const productNames: { [key: string]: string } = {
@@ -34,7 +31,7 @@ const parseProductFromUrl = async (slug: string[]): Promise<Product | null> => {
 
     // Server-side token verification
     if (!verifyTokenSignature(token)) {
-      throw new Error("FABRICATED_TOKEN");
+      return null;
     }
 
     // Decode the token
@@ -50,17 +47,16 @@ const parseProductFromUrl = async (slug: string[]): Promise<Product | null> => {
       token: token,
     };
   } catch (error) {
-    if (error instanceof Error && error.message === "FABRICATED_TOKEN") {
-      throw error;
-    }
+    console.error("Error parsing product:", error);
     return null;
   }
 };
 
-export async function generateMetadata(
-  { params }: { params: { slug: string[] } },
-  parent: ResolvingMetadata
-): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: { slug: string[] };
+}): Promise<Metadata> {
   const product = await parseProductFromUrl(params.slug);
 
   if (!product || !product.decodedToken) {
@@ -80,18 +76,9 @@ export default async function MintPage({
 }: {
   params: { slug: string[] };
 }) {
-  let error = null;
-  let product = null;
+  const product = await parseProductFromUrl(params.slug);
 
-  try {
-    product = await parseProductFromUrl(params.slug);
-  } catch (e) {
-    if (e instanceof Error && e.message === "FABRICATED_TOKEN") {
-      error = "FABRICATED_TOKEN";
-    }
-  }
-
-  if (error === "FABRICATED_TOKEN") {
+  if (!product) {
     return (
       <div className="h-[90vh] flex items-center justify-center">
         <div className="text-center">
@@ -99,20 +86,16 @@ export default async function MintPage({
             Something went wrong.
           </h1>
           <p className="text-black">
-            This token appears to be fabricated or tampered with.
+            This token appears to be invalid or tampered with.
           </p>
         </div>
       </div>
     );
   }
 
-  if (!product) {
-    return (
-      <div className="h-[90vh] flex items-center justify-center">
-        <p className="text-lg">Invalid product ID</p>
-      </div>
-    );
-  }
-
-  return <MintButton product={product} />;
+  return (
+    <div className="min-h-screen">
+      <MintButton product={product} />
+    </div>
+  );
 }

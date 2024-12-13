@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { decodeToken, verifyTokenSignature } from "../token/route";
+import { verifyTokenSignature, decodeToken } from "@/utils/token";
 
 export async function POST(request: Request) {
   try {
@@ -109,10 +109,10 @@ export async function POST(request: Request) {
       success: true,
       txHash: receipt.transactionHash,
     });
-  } catch (error: any) {
+  } catch (error: Error | ethers.ErrorDescription | unknown) {
     console.error("Minting error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to mint" },
+      { error: error instanceof Error ? error.message : "Failed to mint" },
       { status: 500 }
     );
   }
