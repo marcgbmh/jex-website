@@ -33,14 +33,21 @@ interface MintButtonProps {
   product: Product;
 }
 
+interface ProductDetailsProps {
+  productName: string;
+  productCategory: string;
+  productColor: string;
+  hideColor: boolean;
+}
+
 // Components
 const ProductImage = ({ src, alt }: { src: string; alt: string }) => (
-  <div className="aspect-square relative mb-6 w-64">
+  <div className="aspect-square relative mb-6 w-full sm:w-64 sm:mr-4 p-4 sm:p-0">
     <Image
       src={src}
       alt={alt}
       fill
-      className="object-cover"
+      className="object-contain"
       priority
       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
     />
@@ -49,58 +56,56 @@ const ProductImage = ({ src, alt }: { src: string; alt: string }) => (
 
 const ProductDetails = ({
   productName,
-  color,
-  number,
-  owner,
-}: {
-  productName: string;
-  color: string;
-  number: string;
-  owner?: string;
-}) => (
-  <div className="mb-6 space-y-1">
+  productCategory,
+  productColor,
+  hideColor,
+}: ProductDetailsProps) => (
+  <div className="mb-6 space-y-2 sm:space-y-1">
     <h1 className="text-2xl mb-6">{productName}</h1>
-    <p>Product: {productName}</p>
-    <p>Color: {color}</p>
-    <p>Number: #{number}</p>
-    {owner && <p>Owner: {formatAddress(owner)}</p>}
+    {!hideColor && productColor && (
+      <p className="text-lg sm:text-base">Color: {productColor}</p>
+    )}
+    <p className="text-lg sm:text-base">
+      Contract:{" "}
+      <a
+        href={`https://basescan.org/address/${process.env.NEXT_PUBLIC_CONTRACT_ADDRESS}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hover:opacity-50 transition-opacity underline break-all"
+      >
+        {formatAddress(
+          process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ??
+            "Contract address not found"
+        )}
+      </a>
+    </p>
   </div>
 );
 
-const TransactionLinks = ({
-  txHash,
-  tokenId,
-  contractAddress,
-}: {
-  txHash?: string;
-  tokenId?: string;
-  contractAddress: string;
-}) => (
-  <div className="flex gap-2 justify-center mt-4">
-    {txHash && (
-      <a
-        href={`https://basescan.org/tx/${txHash}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-blue-600 hover:underline"
-        aria-label="View transaction on BaseScan"
-      >
-        View on BaseScan
-      </a>
-    )}
-    {tokenId && (
+const TransactionLinks = ({ tokenId }: { tokenId?: string }) => {
+  const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+
+  return (
+    <div className="flex flex-col gap-2">
       <a
         href={`https://opensea.io/assets/base/${contractAddress}/${tokenId}`}
         target="_blank"
         rel="noopener noreferrer"
         className="text-sm text-blue-600 hover:underline"
-        aria-label="View NFT on OpenSea"
       >
         View on OpenSea
       </a>
-    )}
-  </div>
-);
+      <a
+        href={`https://basescan.org/address/${contractAddress}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm text-blue-600 hover:underline"
+      >
+        View on BaseScan
+      </a>
+    </div>
+  );
+};
 
 const AddressInput = ({
   value,
@@ -117,7 +122,7 @@ const AddressInput = ({
     <div className="flex gap-2">
       <Input
         type="text"
-        placeholder="Enter your address"
+        placeholder="Enter your wallet address"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label="Ethereum address input"
@@ -142,74 +147,100 @@ const AddressInput = ({
 // Utilities
 const formatProductName = (name: string): string => {
   const productNames: Record<string, string> = {
-    HUGMUG: "Hugmug",
-    STRAPBOX: "Strapbox",
-    CAMPLAMP: "Camplamp",
+    HUGMUG: "Hug Mug",
+    STRAPBOX: "Strap Box",
+    CAMPLAMP: "Camp Lamp",
+    // Add any new two-word products here following the same pattern
   };
-  return productNames[name] || name;
+  // First check if we have a direct mapping
+  if (productNames[name]) {
+    return productNames[name];
+  }
+  // If no direct mapping, try to split camelCase or uppercase words
+  return name.replace(/([A-Z])/g, " $1").trim();
 };
 
-const formatAddress = (address: string): string => {
-  if (!address) return "";
+const formatAddress = (address: string) => {
+  if (!address) return "No address available";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
 // Main Component
 export default function MintButton({ product }: MintButtonProps) {
   const [isMinting, setIsMinting] = useState(false);
-  const [walletAddress, setWalletAddress] = useState("");
   const [inputAddress, setInputAddress] = useState("");
   const [error, setError] = useState("");
   const [mintSuccess, setMintSuccess] = useState(false);
-  const [txHash, setTxHash] = useState("");
-  const [tokenId, setTokenId] = useState("");
+  const [tokenId, setTokenId] = useState<string>();
   const [tokenExists, setTokenExists] = useState(false);
   const { login, authenticated, ready, user } = usePrivy();
-  const effectiveAddress = walletAddress || user?.wallet?.address;
+
+  console.log("User wallet:", user?.wallet?.address);
+  console.log("Input Address:", inputAddress);
+
+  const effectiveAddress = user?.wallet?.address || inputAddress;
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+  const decodedToken = product.decodedToken;
 
-  // Only check existence on mount
   useEffect(() => {
-    if (!product?.decodedToken || !contractAddress || isMinting || mintSuccess)
-      return;
-
-    const provider = new ethers.JsonRpcProvider(
-      process.env.NEXT_PUBLIC_RPC_URL
-    );
-    const contractABI = [
-      "function exists(uint64 collection, uint64 serialNumber) public view returns (bool)",
-      "function getTokenId(uint64 collection, uint64 serialNumber) public pure returns (uint256)",
-    ];
-
-    const contract = new ethers.Contract(
-      contractAddress,
-      contractABI,
-      provider
-    );
-    const collectionName = product.decodedToken.t.toUpperCase();
-
-    if (!(collectionName in CollectionId)) {
-      console.error("Invalid collection name:", collectionName);
+    console.log("Product category:", product.category);
+    console.log("Product color:", decodedToken?.c);
+    // Don't run existence check right after minting
+    if (!decodedToken?.t || !contractAddress || isMinting) {
       return;
     }
 
-    const collectionId =
-      CollectionId[collectionName as keyof typeof CollectionId];
-    const serialNumber = Number(product.decodedToken.n);
+    // Add a delay if we just completed minting
+    const delay = mintSuccess ? 2000 : 0;
 
-    contract
-      .exists(collectionId, serialNumber)
-      .then(async (exists) => {
-        if (exists) {
+    const checkExistence = async () => {
+      const provider = new ethers.JsonRpcProvider(
+        process.env.NEXT_PUBLIC_RPC_URL
+      );
+      const contractABI = [
+        "function exists(uint64 collection, uint64 serialNumber) public view returns (bool)",
+        "function ownerOf(uint256 tokenId) public view returns (address)",
+        "function getTokenId(uint64 collection, uint64 serialNumber) public pure returns (uint256)",
+      ];
+
+      const contract = new ethers.Contract(
+        contractAddress,
+        contractABI,
+        provider
+      );
+      const collectionName = decodedToken.t.toUpperCase();
+
+      if (!(collectionName in CollectionId)) {
+        console.error("Invalid collection name:", collectionName);
+        return;
+      }
+
+      const collectionId =
+        CollectionId[collectionName as keyof typeof CollectionId];
+      const serialNumber = Number(decodedToken.n);
+
+      try {
+        const exists = await contract.exists(collectionId, serialNumber);
+        if (exists && !mintSuccess) {
           setTokenExists(true);
           const tokenId = await contract.getTokenId(collectionId, serialNumber);
           setTokenId(tokenId.toString());
+          await contract.ownerOf(tokenId);
         }
-      })
-      .catch(console.error);
-  }, [contractAddress, isMinting, mintSuccess, product.decodedToken]);
+      } catch (error) {
+        console.error(error);
+      }
+    };
 
-  // Set token state on mint success
+    setTimeout(checkExistence, delay);
+  }, [
+    contractAddress,
+    isMinting,
+    mintSuccess,
+    decodedToken?.t,
+    product.category,
+  ]);
+
   useEffect(() => {
     if (mintSuccess && effectiveAddress) {
       setTokenExists(true);
@@ -217,7 +248,7 @@ export default function MintButton({ product }: MintButtonProps) {
   }, [mintSuccess, effectiveAddress]);
 
   const handleMint = async () => {
-    if (!authenticated && !walletAddress) {
+    if (!authenticated) {
       login();
       return;
     }
@@ -235,33 +266,20 @@ export default function MintButton({ product }: MintButtonProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: product.token,
           walletAddress: mintWalletAddress,
+          token: product.token,
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        if (
-          response.status === 400 &&
-          data.error === "Token already minted or not available"
-        ) {
-          // Only set tokenExists if we're not already in a success state
-          if (!mintSuccess) {
-            setTokenExists(true);
-            throw new Error("This item has already been claimed");
-          }
-        }
-        throw new Error(data.error || "Failed to mint");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to mint");
       }
 
-      // Clear any existing states and set success
-      setTokenExists(false);
-      setError("");
+      const { tokenId: newTokenId } = await response.json();
+      setTokenId(newTokenId);
       setMintSuccess(true);
-      setTxHash(data.txHash);
-      if (data.tokenId) setTokenId(data.tokenId);
+      setTokenExists(true);
     } catch (error) {
       console.error("Mint error:", error);
       setError(error instanceof Error ? error.message : "Failed to mint");
@@ -273,7 +291,7 @@ export default function MintButton({ product }: MintButtonProps) {
   const handleAddressSubmit = () => {
     try {
       if (ethers.isAddress(inputAddress)) {
-        setWalletAddress(inputAddress);
+        setInputAddress("");
         setError("");
       } else {
         setError("Please enter valid Ethereum address");
@@ -284,8 +302,11 @@ export default function MintButton({ product }: MintButtonProps) {
   };
 
   const handleAddressClick = () => {
-    setWalletAddress("");
+    setMintSuccess(false);
+    setTokenExists(false);
     setInputAddress("");
+    setError("");
+    setTokenId(undefined);
   };
 
   if (!ready) {
@@ -299,58 +320,127 @@ export default function MintButton({ product }: MintButtonProps) {
     );
   }
 
-  const productName = product.decodedToken?.t
-    ? formatProductName(product.decodedToken.t)
-    : "";
+  const productName = decodedToken ? formatProductName(decodedToken.t) : "";
 
   return (
-    <div className="min-h-[90vh] flex items-center justify-center flex-col">
-      <div className="flex  gap-8 w-full max-w-md items-center mx-auto">
-        <ProductImage src={product.imageUrl} alt={productName} />
-        <div>
-          <ProductDetails
-            productName={productName}
-            color={product.decodedToken?.c ?? ""}
-            number={product.decodedToken?.n?.toString() ?? ""}
-            owner={mintSuccess ? effectiveAddress : undefined}
-          />
-          {mintSuccess && (
-            <TransactionLinks
-              txHash={txHash}
-              tokenId={tokenId}
-              contractAddress={contractAddress ?? ""}
-            />
-          )}
+    <div className="w-full min-h-[90vh] flex flex-col justify-between sm:justify-center">
+      <div className="w-full flex-grow flex flex-col items-center justify-center">
+        <div className="w-full max-w-lg mx-auto p-4 sm:p-0">
+          <div className="w-full flex flex-col sm:flex-row sm:gap-8 items-center mb-6">
+            <div className="w-full sm:w-auto order-2 sm:order-1">
+              <ProductDetails
+                productName={productName}
+                productCategory={product.category}
+                productColor={decodedToken?.c ?? ""}
+                hideColor={decodedToken?.t === "CAMPLAMP"}
+              />
+            </div>
+            <ProductImage src={product.imageUrl} alt={productName} />
+          </div>
+          <div className="w-full hidden sm:block">
+            {mintSuccess ? (
+              <div className="w-full text-center">
+                <div className="w-full bg-green-50 p-4 sm:p-6 rounded-lg border border-green-200">
+                  <h3 className="font-medium text-lg sm:text-xl mb-2">
+                    Congratulations!
+                  </h3>
+                  <p className="text-gray-700 mb-4 text-sm sm:text-base">
+                    Your item has been successfully minted.
+                  </p>
+                  <TransactionLinks tokenId={tokenId} />
+                </div>
+              </div>
+            ) : tokenExists ? (
+              <div className="w-full">
+                <p className="w-full text-sm sm:text-base mb-2">
+                  Object has been minted!
+                </p>
+                <TransactionLinks tokenId={tokenId} />
+              </div>
+            ) : !authenticated ? (
+              <div className="w-full">
+                <p className="w-full mb-2 text-sm sm:text-base">
+                  Enter wallet address or connect to mint
+                </p>
+                <div className="w-full flex flex-col gap-2">
+                  <AddressInput
+                    value={inputAddress}
+                    onChange={(value) => {
+                      setInputAddress(value);
+                      setError("");
+                    }}
+                    onSubmit={handleAddressSubmit}
+                    error={error}
+                  />
+                  <Button
+                    onClick={login}
+                    className="w-full"
+                    aria-label="Connect with wallet"
+                  >
+                    Connect
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full">
+                <p className="w-full font-medium mb-2 text-sm sm:text-base">
+                  Mint to{" "}
+                  <button
+                    onClick={handleAddressClick}
+                    className="break-all font-normal hover:opacity-50 transition-opacity underline"
+                  >
+                    {formatAddress(effectiveAddress)}
+                  </button>
+                </p>
+                <Button
+                  onClick={handleMint}
+                  className="w-full"
+                  disabled={isMinting}
+                  aria-busy={isMinting}
+                >
+                  {isMinting ? "Minting..." : "Mint"}
+                </Button>
+                {error && (
+                  <p
+                    className="w-full text-red-500 text-sm mt-2 break-words"
+                    role="alert"
+                  >
+                    {error}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      <div className="flex flex-col gap-4 mt-2 w-full max-w-md mx-auto">
+      <div className="w-full sm:hidden flex justify-center w-full">
         {mintSuccess ? (
-          <div className="text-center space-y-4">
-            <div className="bg-green-50 p-6 rounded-lg border border-green-200">
-              <h3 className="font-medium text-xl mb-2">Congratulations!</h3>
-              <p className="text-gray-700 mb-4">
-                Your item has been successfully claimed.
+          <div className="w-full text-center">
+            <div className="w-full bg-green-50 p-4 sm:p-6 rounded-lg border border-green-200">
+              <h3 className="font-medium text-lg sm:text-xl mb-2">
+                Congratulations!
+              </h3>
+              <p className="text-gray-700 mb-4 text-sm sm:text-base">
+                Your item has been successfully minted.
               </p>
-              <TransactionLinks
-                txHash={txHash}
-                tokenId={tokenId}
-                contractAddress={contractAddress ?? ""}
-              />
+              <TransactionLinks tokenId={tokenId} />
             </div>
           </div>
         ) : tokenExists ? (
-          <div>
-            <p>Object has already been claimed.</p>
-            <TransactionLinks
-              tokenId={tokenId}
-              contractAddress={contractAddress ?? ""}
-            />
+          <div className="w-full">
+            <p className="w-full text-sm sm:text-base mb-2 px-4">
+              Object has already been minted.
+            </p>
+            <div className="w-full flex flex-col gap-2 p-4">
+              <TransactionLinks tokenId={tokenId} />
+            </div>
           </div>
-        ) : !authenticated && !walletAddress ? (
-          <div>
-            <p className=" mb-4">Enter address or login to claim</p>
-            <div className="flex flex-col gap-4">
+        ) : !authenticated ? (
+          <div className="w-full p-4">
+            <p className="w-full mb-2 text-sm sm:text-base">
+              Enter address or login to mint
+            </p>
+            <div className="w-full flex flex-col gap-2">
               <AddressInput
                 value={inputAddress}
                 onChange={(value) => {
@@ -360,38 +450,39 @@ export default function MintButton({ product }: MintButtonProps) {
                 onSubmit={handleAddressSubmit}
                 error={error}
               />
-              <p className="text-center">or</p>
               <Button
                 onClick={login}
-                className="border border-black p-2 px-4"
-                aria-label="Login with wallet"
+                className="w-full border border-black"
+                aria-label="Connect with wallet"
               >
-                Login
+                Connect
               </Button>
             </div>
           </div>
         ) : (
-          <div>
-            <p className="font-medium mb-4">
-              Claim to{" "}
+          <div className="w-full p-4 sm:p-0 ">
+            <p className="w-full font-medium mb-2 text-sm sm:text-base ">
+              Mint to{" "}
               <button
-                className="hover:opacity-50 cursor-pointer transition-opacity"
                 onClick={handleAddressClick}
-                aria-label="Change address"
+                className="break-all font-normal hover:opacity-50 transition-opacity underline"
               >
-                {formatAddress(effectiveAddress ?? "")}
+                {formatAddress(effectiveAddress)}
               </button>
             </p>
             <Button
               onClick={handleMint}
-              className="border border-black p-2 px-4 w-full"
+              className="w-full"
               disabled={isMinting}
               aria-busy={isMinting}
             >
-              {isMinting ? "Claiming..." : "Claim"}
+              {isMinting ? "Minting..." : "Mint"}
             </Button>
             {error && (
-              <p className="text-red-500 text-sm mt-2" role="alert">
+              <p
+                className="w-full text-red-500 text-sm mt-2 break-words"
+                role="alert"
+              >
                 {error}
               </p>
             )}
