@@ -344,7 +344,7 @@ export default function MintButton({ product }: MintButtonProps) {
                     Congratulations!
                   </h3>
                   <p className="text-gray-700 mb-4 text-sm sm:text-base">
-                    Your item has been successfully minted.
+                    Your object has been successfully minted.
                   </p>
                   <TransactionLinks tokenId={tokenId} />
                 </div>
@@ -421,7 +421,7 @@ export default function MintButton({ product }: MintButtonProps) {
                 Congratulations!
               </h3>
               <p className="text-gray-700 mb-4 text-sm sm:text-base">
-                Your item has been successfully minted.
+                Object has been minted!
               </p>
               <TransactionLinks tokenId={tokenId} />
             </div>
@@ -429,7 +429,7 @@ export default function MintButton({ product }: MintButtonProps) {
         ) : tokenExists ? (
           <div className="w-full">
             <p className="w-full text-sm sm:text-base mb-2 px-4">
-              Object has already been minted.
+              Object has been minted!
             </p>
             <div className="w-full flex flex-col gap-2 p-4">
               <TransactionLinks tokenId={tokenId} />
