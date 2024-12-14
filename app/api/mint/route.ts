@@ -14,6 +14,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { token, walletAddress } = body;
 
+    console.log("API: Starting mint process", { walletAddress });
+
     if (!token) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 });
     }
@@ -25,24 +27,27 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("Received token:", token);
-
-    // Verify token signature first
+    console.log("API: Verifying token signature");
     const isValid = await verifyTokenSignature(token);
     if (!isValid) {
+      console.log("API: Token signature verification failed");
       return NextResponse.json(
         { error: "Invalid token signature" },
         { status: 401 }
       );
     }
 
+    console.log("API: Decoding token");
     const decodedToken = await decodeToken(token);
     if (!decodedToken) {
+      console.log("API: Token decoding failed");
       return NextResponse.json(
         { error: "Invalid token format" },
         { status: 400 }
       );
     }
+
+    console.log("API: Token decoded successfully", { decodedToken });
 
     const { n: serialNumber, t: collectionName, c: colorName } = decodedToken;
 
@@ -104,7 +109,7 @@ export async function POST(request: Request) {
 
     console.log(provider);
 
-    console.log("Minting with params:", {
+    console.log("API: Minting with params:", {
       walletAddress,
       collection,
       serialNumber,
@@ -119,10 +124,10 @@ export async function POST(request: Request) {
       { gasLimit: 600000 }
     );
 
-    console.log("Transaction sent:", tx.hash);
+    console.log("API: Transaction sent:", tx.hash);
 
     const receipt = await tx.wait();
-    console.log("Transaction receipt:", receipt);
+    console.log("API: Transaction receipt:", receipt);
 
     // Calculate tokenId
     const tokenId = await contract.getTokenId(collection, serialNumber);
@@ -134,7 +139,7 @@ export async function POST(request: Request) {
     });
   } catch (error: unknown) {
     const ethError = error as EthereumError;
-    console.error("Minting error:", {
+    console.error("API: Minting error:", {
       error,
       message: ethError.message,
       code: ethError.code,

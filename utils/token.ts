@@ -21,10 +21,16 @@ async function sign(packedData: Buffer, secret: string): Promise<ArrayBuffer> {
 export const verifyTokenSignature = async (token: string): Promise<boolean> => {
   try {
     const [encodedData, encodedSignature] = token.split(".");
-    if (!encodedData || !encodedSignature) return false;
+    if (!encodedData || !encodedSignature) {
+      console.log("Token verification failed: Invalid token format");
+      return false;
+    }
 
     const secret = process.env.JWT_SECRET;
-    if (!secret) return false;
+    if (!secret) {
+      console.log("Token verification failed: JWT_SECRET not configured");
+      return false;
+    }
 
     // Decode the base64url data
     const packedData = base64Decode(encodedData);
@@ -35,8 +41,11 @@ export const verifyTokenSignature = async (token: string): Promise<boolean> => {
     const expectedSignatureBuffer = Buffer.from(expectedSignature).subarray(0, 16);
 
     // Compare signatures using timing-safe comparison
-    return expectedSignatureBuffer.equals(providedSignature);
-  } catch {
+    const isValid = expectedSignatureBuffer.equals(providedSignature);
+    console.log("Token verification result:", isValid);
+    return isValid;
+  } catch (error) {
+    console.log("Token verification failed with error:", error);
     return false;
   }
 };
