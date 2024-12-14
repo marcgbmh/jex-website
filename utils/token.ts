@@ -6,21 +6,11 @@ function base64Decode(data: string): Buffer {
   return Buffer.from(paddedData, "base64url");
 }
 
-async function sign(packedData: Buffer, secret: string): Promise<ArrayBuffer> {
+async function sign(packedData: Buffer, secret: string): Promise<Buffer> {
   try {
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    console.log("Signature generation:", {
-      packedDataLength: packedData.length,
-      secretLength: secret.length,
-    });
-    return crypto.subtle.sign("HMAC", key, packedData);
+    const hmac = createHmac("sha256", secret);
+    hmac.update(packedData);
+    return hmac.digest();
   } catch (error) {
     console.error("Error in sign function:", error);
     throw error;
@@ -53,10 +43,7 @@ export const verifyTokenSignature = async (token: string): Promise<boolean> => {
 
     // Calculate expected signature
     const expectedSignature = await sign(packedData, secret);
-    const expectedSignatureBuffer = Buffer.from(expectedSignature).subarray(
-      0,
-      16
-    );
+    const expectedSignatureBuffer = expectedSignature.subarray(0, 16);
 
     // Compare signatures using timing-safe comparison
     const isValid = expectedSignatureBuffer.equals(providedSignature);
