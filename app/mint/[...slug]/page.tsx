@@ -4,9 +4,9 @@ import { Metadata } from "next";
 
 const formatProductName = (name: string): string => {
   const productNames: { [key: string]: string } = {
-    HUGMUG: "Hugmug",
-    STRAPBOX: "Strapbox",
-    CAMPLAMP: "Camplamp",
+    HUGMUG: "Hug Mug",
+    STRAPBOX: "Strap Box",
+    CAMPLAMP: "Camp Lamp",
   };
   return productNames[name] || name;
 };
