@@ -28,9 +28,13 @@ export function Nav() {
             authenticated ? () => (window.location.href = "/account") : login
           }
           size="icon"
-          className={authenticated ? "md:w-auto md:px-4 md:h-10" : "md:w-auto md:px-4 md:h-10"}
+          className={
+            authenticated
+              ? "md:w-auto md:px-4 md:h-10"
+              : "md:w-auto md:px-4 md:h-10"
+          }
         >
-          <User className="h-4 w-4 md:mr-2" />
+          <User className="h-4 w-4 md:hidden" />
           {authenticated ? (
             <span className="hidden md:inline">Collection</span>
           ) : (
