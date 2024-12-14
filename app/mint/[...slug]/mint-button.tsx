@@ -56,7 +56,6 @@ const ProductImage = ({ src, alt }: { src: string; alt: string }) => (
 
 const ProductDetails = ({
   productName,
-  productCategory,
   productColor,
   hideColor,
 }: ProductDetailsProps) => (
