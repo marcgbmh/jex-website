@@ -28,14 +28,15 @@ export async function POST(request: Request) {
     console.log("Received token:", token);
 
     // Verify token signature first
-    if (!verifyTokenSignature(token)) {
+    const isValid = await verifyTokenSignature(token);
+    if (!isValid) {
       return NextResponse.json(
         { error: "Invalid token signature" },
         { status: 401 }
       );
     }
 
-    const decodedToken = decodeToken(token);
+    const decodedToken = await decodeToken(token);
     if (!decodedToken) {
       return NextResponse.json(
         { error: "Invalid token format" },

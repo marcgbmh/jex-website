@@ -8,11 +8,11 @@ export async function GET(request: Request) {
     return new Response("Token is required", { status: 400 });
   }
 
-  const isValid = verifyTokenSignature(token);
+  const isValid = await verifyTokenSignature(token);
   if (!isValid) {
     return new Response("Invalid token", { status: 401 });
   }
 
-  const decodedToken = decodeToken(token);
+  const decodedToken = await decodeToken(token);
   return Response.json(decodedToken);
 }

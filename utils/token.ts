@@ -6,14 +6,19 @@ function base64Decode(data: string): Buffer {
   return Buffer.from(paddedData, "base64url");
 }
 
-function sign(packedData: Buffer, secret: string): Buffer {
-  const hmac = createHmac("sha256", secret);
-  const signature = hmac.update(packedData).digest();
-
-  return signature.subarray(0, 16);
+async function sign(packedData: Buffer, secret: string): Promise<ArrayBuffer> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  return crypto.subtle.sign("HMAC", key, packedData);
 }
 
-export const verifyTokenSignature = (token: string): boolean => {
+export const verifyTokenSignature = async (token: string): Promise<boolean> => {
   try {
     const [encodedData, encodedSignature] = token.split(".");
     if (!encodedData || !encodedSignature) return false;
@@ -26,18 +31,19 @@ export const verifyTokenSignature = (token: string): boolean => {
     const providedSignature = base64Decode(encodedSignature);
 
     // Calculate expected signature
-    const expectedSignature = sign(packedData, secret);
+    const expectedSignature = await sign(packedData, secret);
+    const expectedSignatureBuffer = Buffer.from(expectedSignature).subarray(0, 16);
 
     // Compare signatures using timing-safe comparison
-    return expectedSignature.equals(providedSignature);
+    return expectedSignatureBuffer.equals(providedSignature);
   } catch {
     return false;
   }
 };
 
-export const decodeToken = (token: string) => {
+export const decodeToken = async (token: string) => {
   try {
-    if (!verifyTokenSignature(token)) return null;
+    if (!await verifyTokenSignature(token)) return null;
 
     const [payload] = token.split(".");
     const packedData = base64Decode(payload);

@@ -371,6 +371,7 @@ export default function MintButton({ product }: MintButtonProps) {
                     onSubmit={handleAddressSubmit}
                     error={error}
                   />
+                  <p className="text-center">or</p>
                   <Button
                     onClick={login}
                     className="w-full"
@@ -449,6 +450,7 @@ export default function MintButton({ product }: MintButtonProps) {
                 onSubmit={handleAddressSubmit}
                 error={error}
               />
+              <p className="text-center">or</p>
               <Button
                 onClick={login}
                 className="w-full border border-black"

@@ -30,12 +30,13 @@ const parseProductFromUrl = async (slug: string[]): Promise<Product | null> => {
     if (!token) return null;
 
     // Server-side token verification
-    if (!verifyTokenSignature(token)) {
+    const isValid = await verifyTokenSignature(token);
+    if (!isValid) {
       return null;
     }
 
     // Decode the token
-    const decoded = decodeToken(token);
+    const decoded = await decodeToken(token);
     if (!decoded) return null;
 
     // Create product info from decoded data
