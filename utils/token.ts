@@ -7,15 +7,24 @@ function base64Decode(data: string): Buffer {
 }
 
 async function sign(packedData: Buffer, secret: string): Promise<ArrayBuffer> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  return crypto.subtle.sign("HMAC", key, packedData);
+  try {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    console.log("Signature generation:", {
+      packedDataLength: packedData.length,
+      secretLength: secret.length,
+    });
+    return crypto.subtle.sign("HMAC", key, packedData);
+  } catch (error) {
+    console.error("Error in sign function:", error);
+    throw error;
+  }
 }
 
 export const verifyTokenSignature = async (token: string): Promise<boolean> => {
@@ -23,6 +32,7 @@ export const verifyTokenSignature = async (token: string): Promise<boolean> => {
     console.log("Environment check:", {
       hasJwtSecret: !!process.env.JWT_SECRET,
       nodeEnv: process.env.NODE_ENV,
+      secretLength: process.env.JWT_SECRET?.length,
     });
 
     const [encodedData, encodedSignature] = token.split(".");
@@ -55,6 +65,7 @@ export const verifyTokenSignature = async (token: string): Promise<boolean> => {
       hasEncodedSignature: !!encodedSignature,
       signatureLength: providedSignature.length,
       expectedLength: expectedSignatureBuffer.length,
+      encodedDataLength: encodedData.length,
       isValid,
     });
     console.log("Token verification result:", isValid);
