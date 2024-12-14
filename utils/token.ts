@@ -20,6 +20,11 @@ async function sign(packedData: Buffer, secret: string): Promise<ArrayBuffer> {
 
 export const verifyTokenSignature = async (token: string): Promise<boolean> => {
   try {
+    console.log("Environment check:", {
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      nodeEnv: process.env.NODE_ENV,
+    });
+
     const [encodedData, encodedSignature] = token.split(".");
     if (!encodedData || !encodedSignature) {
       console.log("Token verification failed: Invalid token format");
@@ -38,10 +43,20 @@ export const verifyTokenSignature = async (token: string): Promise<boolean> => {
 
     // Calculate expected signature
     const expectedSignature = await sign(packedData, secret);
-    const expectedSignatureBuffer = Buffer.from(expectedSignature).subarray(0, 16);
+    const expectedSignatureBuffer = Buffer.from(expectedSignature).subarray(
+      0,
+      16
+    );
 
     // Compare signatures using timing-safe comparison
     const isValid = expectedSignatureBuffer.equals(providedSignature);
+    console.log("Token verification details:", {
+      hasEncodedData: !!encodedData,
+      hasEncodedSignature: !!encodedSignature,
+      signatureLength: providedSignature.length,
+      expectedLength: expectedSignatureBuffer.length,
+      isValid,
+    });
     console.log("Token verification result:", isValid);
     return isValid;
   } catch (error) {
@@ -52,7 +67,7 @@ export const verifyTokenSignature = async (token: string): Promise<boolean> => {
 
 export const decodeToken = async (token: string) => {
   try {
-    if (!await verifyTokenSignature(token)) return null;
+    if (!(await verifyTokenSignature(token))) return null;
 
     const [payload] = token.split(".");
     const packedData = base64Decode(payload);
