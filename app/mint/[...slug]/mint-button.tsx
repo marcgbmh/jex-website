@@ -150,13 +150,11 @@ const AddressInput = ({
   onChange,
   onSubmit,
   error,
-  resolvedAddress,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   error?: string;
-  resolvedAddress?: string;
 }) => (
   <div className="flex flex-col gap-2">
     <div className="flex gap-2">
@@ -182,11 +180,6 @@ const AddressInput = ({
         Enter
       </Button>
     </div>
-    {resolvedAddress && value.endsWith(".eth") && (
-      <p className="text-sm text-gray-600">
-        Resolved to: {formatAddress(resolvedAddress)}
-      </p>
-    )}
     {error && (
       <p className="text-red-500 text-sm" role="alert">
         {error}
@@ -220,59 +213,72 @@ const formatAddress = (address: string) => {
 export default function MintButton({ product }: MintButtonProps) {
   const [isMinting, setIsMinting] = useState(false);
   const [inputAddress, setInputAddress] = useState("");
-  const [resolvedAddress, setResolvedAddress] = useState("");
   const [error, setError] = useState("");
+  const [validatedInput, setValidatedInput] = useState(false);
   const [mintSuccess, setMintSuccess] = useState(false);
   const [tokenExists, setTokenExists] = useState(false);
-  const [initialCheckDone, setInitialCheckDone] = useState(false);
   const { login, authenticated, ready, user } = usePrivy();
 
   console.log("User wallet:", user?.wallet?.address);
   console.log("Input Address:", inputAddress);
-  console.log("Resolved Address:", resolvedAddress);
 
-  const effectiveAddress =
-    user?.wallet?.address || resolvedAddress || inputAddress;
+  const effectiveAddress = user?.wallet?.address || inputAddress;
 
-  const resolveEns = async (input: string) => {
+  const resolveENS = async (input: string) => {
+    if (!input) return null;
+
     try {
-      if (input.endsWith(".eth")) {
-        // Use Ethereum mainnet provider specifically for ENS resolution
-        const mainnetProvider = new ethers.JsonRpcProvider(
-          process.env.NEXT_PUBLIC_MAINNET_RPC_URL
-        );
-        const address = await mainnetProvider.resolveName(input);
-        if (address) {
-          setResolvedAddress(address);
-          setInputAddress(address);
-          setError("");
-          return true;
-        } else {
-          setError("Could not resolve ENS name");
-          return false;
-        }
-      } else if (ethers.isAddress(input)) {
-        setResolvedAddress(input);
-        setInputAddress(input);
-        setError("");
-        return true;
-      } else {
-        setError("Invalid address or ENS name");
-        return false;
+      const response = await fetch(
+        `/api/resolve-ens?query=${encodeURIComponent(input)}`
+      );
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
       }
+
+      return data.address;
     } catch (error) {
       console.error("ENS resolution error:", error);
-      setError("Error resolving ENS name");
-      return false;
+      throw error;
     }
   };
 
+  const handleRecipientChange = (value: string) => {
+    setInputAddress(value);
+    setValidatedInput(false);
+    setError("");
+  };
+
   const handleAddressSubmit = async () => {
-    const isValid = await resolveEns(inputAddress);
-    if (isValid) {
-      setMintSuccess(false);
-      setTokenExists(false);
+    if (!inputAddress) return;
+
+    try {
+      // For regular Ethereum addresses
+      if (ethers.isAddress(inputAddress)) {
+        setValidatedInput(true);
+        return;
+      }
+
+      // For ENS names
+      if ((inputAddress as string).includes(".")) {
+        const address = await resolveENS(inputAddress);
+        if (address) {
+          setInputAddress(address);
+          setValidatedInput(true);
+          return;
+        }
+      }
+
+      setError("Invalid address or ENS name");
+    } catch (error) {
+      console.error("Error submitting address:", error);
+      setError("Failed to resolve address");
     }
+  };
+
+  const handleAddressClick = () => {
+    setValidatedInput(false);
   };
 
   useEffect(() => {
@@ -280,11 +286,7 @@ export default function MintButton({ product }: MintButtonProps) {
     console.log("Product color:", product.decodedToken?.c);
 
     // Only run existence check on initial load
-    if (
-      initialCheckDone ||
-      !product.decodedToken?.t ||
-      !process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
-    ) {
+    if (!product.decodedToken?.t || !process.env.NEXT_PUBLIC_CONTRACT_ADDRESS) {
       return;
     }
 
@@ -332,24 +334,15 @@ export default function MintButton({ product }: MintButtonProps) {
         if (exists) {
           setTokenExists(true);
         }
-        setInitialCheckDone(true);
       } catch (error) {
         console.error(error);
-        setInitialCheckDone(true);
       }
     };
 
     checkExistence();
-  }, [product.decodedToken, initialCheckDone, product.category]);
-
-  useEffect(() => {
-    if (mintSuccess && effectiveAddress) {
-      setTokenExists(true);
-    }
-  }, [mintSuccess, effectiveAddress]);
+  }, [product.decodedToken, product.category]);
 
   const handleMint = async () => {
-    // If no address is set and user is not authenticated, prompt for login
     if (!effectiveAddress) {
       if (!authenticated) {
         login();
@@ -362,16 +355,11 @@ export default function MintButton({ product }: MintButtonProps) {
     setError("");
 
     try {
-      const mintWalletAddress = effectiveAddress;
-      if (!mintWalletAddress) {
-        throw new Error("No wallet address available");
-      }
-
       const response = await fetch("/api/mint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          walletAddress: mintWalletAddress,
+          walletAddress: effectiveAddress,
           token: product.token,
         }),
       });
@@ -397,13 +385,6 @@ export default function MintButton({ product }: MintButtonProps) {
     } finally {
       setIsMinting(false);
     }
-  };
-
-  const handleAddressClick = () => {
-    // Reset states
-    setResolvedAddress("");
-    setInputAddress("");
-    setError("");
   };
 
   if (!ready) {
@@ -443,7 +424,7 @@ export default function MintButton({ product }: MintButtonProps) {
         <div className="w-full max-w-lg mx-auto">
           {mintSuccess ? (
             <div className="w-full">
-              <div className="w-full rounded-lg ">
+              <div className="w-full rounded-lg">
                 <h3 className="font-medium text-lg sm:text-xl mb-2">
                   Congratulations!
                 </h3>
@@ -455,66 +436,61 @@ export default function MintButton({ product }: MintButtonProps) {
             </div>
           ) : tokenExists && !mintSuccess ? (
             <div className="w-full">
-              <div className="w-full rounded-lg ">
+              <div className="w-full rounded-lg">
                 <p className="mb-4 text-sm sm:text-base">
                   {productName} has been minted.
                 </p>
                 <TransactionLinks serialNumber={product.decodedToken?.n} />
               </div>
             </div>
-          ) : !authenticated && !resolvedAddress ? (
-            <div className="w-full">
-              <p className="w-full mb-2 text-sm sm:text-base">
-                Enter wallet address or connect to mint
-              </p>
-              <div className="w-full flex flex-col gap-2">
-                <AddressInput
-                  value={inputAddress}
-                  onChange={(value) => {
-                    setInputAddress(value);
-                    setError("");
-                  }}
-                  onSubmit={handleAddressSubmit}
-                  error={error}
-                  resolvedAddress={resolvedAddress}
-                />
-                <p className="text-center">or</p>
-                <Button
-                  onClick={login}
-                  className="w-full"
-                  aria-label="Connect with wallet"
-                >
-                  Connect
-                </Button>
-              </div>
-            </div>
           ) : (
-            <div className="w-full">
-              <p className="w-full mb-2 text-sm sm:text-base">
-                Mint to{" "}
-                <button
-                  onClick={handleAddressClick}
-                  className="break-all font-normal hover:opacity-50 transition-opacity underline"
-                >
-                  {formatAddress(effectiveAddress)}
-                </button>
-              </p>
-              <Button
-                onClick={handleMint}
-                className="w-full"
-                disabled={isMinting}
-                aria-busy={isMinting}
-              >
-                {isMinting ? "Minting..." : "Mint"}
-              </Button>
-              {error && (
-                <p
-                  className="w-full text-red-500 text-sm mt-2 break-words"
-                  role="alert"
-                >
-                  {error}
-                </p>
-              )}
+            <div className="w-full flex flex-col gap-4">
+              <div className="w-full">
+                {authenticated || validatedInput ? (
+                  <div className="w-full">
+                    <p className="w-full mb-2 text-sm sm:text-base">
+                      Mint to{" "}
+                      <button
+                        onClick={handleAddressClick}
+                        className="break-all font-normal hover:opacity-50 transition-opacity underline"
+                      >
+                        {formatAddress(effectiveAddress)}
+                      </button>
+                    </p>
+                    <Button
+                      onClick={handleMint}
+                      className="w-full"
+                      disabled={isMinting}
+                    >
+                      {isMinting ? "Minting..." : "Mint"}
+                    </Button>
+                    {error && (
+                      <p className="text-red-500 text-sm mt-2" role="alert">
+                        {error}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-full">
+                    <div className="w-full flex flex-col gap-4">
+                      <AddressInput
+                        value={inputAddress}
+                        onChange={handleRecipientChange}
+                        onSubmit={handleAddressSubmit}
+                        error={error}
+                      />
+                      <p className="text-center">or</p>
+                      <Button
+                        onClick={login}
+                        className="w-full"
+                        aria-label="Connect with wallet"
+                      >
+                        Connect
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
