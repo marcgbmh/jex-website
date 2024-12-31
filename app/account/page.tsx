@@ -2,7 +2,6 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
-import { JsonRpcProvider } from "ethers";
 import Image from "next/image";
 
 // Types for NFTs
