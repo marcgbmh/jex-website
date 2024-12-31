@@ -43,7 +43,7 @@ const parseProductFromUrl = async (slug: string[]): Promise<Product | null> => {
     return {
       id: `${decoded.t}-${decoded.c}-${decoded.n.toString().padStart(6, "0")}`,
       category: decoded.c,
-      imageUrl: `/products/${decoded.t}.png`,
+      imageUrl: `/products/${decoded.t}.jpg`,
       decodedToken: decoded,
       token: token,
     };
