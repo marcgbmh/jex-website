@@ -85,6 +85,9 @@ const ProductDetails = ({
 
 const TransactionLinks = ({ tokenId }: { tokenId?: string }) => {
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+  if (!contractAddress) {
+    throw new Error("Contract address not configured");
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -113,20 +116,28 @@ const AddressInput = ({
   onChange,
   onSubmit,
   error,
+  resolvedAddress,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   error?: string;
+  resolvedAddress?: string;
 }) => (
   <div className="flex flex-col gap-2">
     <div className="flex gap-2">
       <Input
         type="text"
-        placeholder="Enter your wallet address"
+        placeholder="Enter your wallet address or ENS name"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        aria-label="Ethereum address input"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onSubmit();
+          }
+        }}
+        aria-label="Ethereum address or ENS name input"
         aria-invalid={!!error}
       />
       <Button
@@ -137,6 +148,11 @@ const AddressInput = ({
         Enter
       </Button>
     </div>
+    {resolvedAddress && value.endsWith(".eth") && (
+      <p className="text-sm text-gray-600">
+        Resolved to: {formatAddress(resolvedAddress)}
+      </p>
+    )}
     {error && (
       <p className="text-red-500 text-sm" role="alert">
         {error}
@@ -170,6 +186,7 @@ const formatAddress = (address: string) => {
 export default function MintButton({ product }: MintButtonProps) {
   const [isMinting, setIsMinting] = useState(false);
   const [inputAddress, setInputAddress] = useState("");
+  const [resolvedAddress, setResolvedAddress] = useState("");
   const [error, setError] = useState("");
   const [mintSuccess, setMintSuccess] = useState(false);
   const [tokenId, setTokenId] = useState<string>();
@@ -178,16 +195,62 @@ export default function MintButton({ product }: MintButtonProps) {
 
   console.log("User wallet:", user?.wallet?.address);
   console.log("Input Address:", inputAddress);
+  console.log("Resolved Address:", resolvedAddress);
 
-  const effectiveAddress = user?.wallet?.address || inputAddress;
-  const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
-  const decodedToken = product.decodedToken;
+  const effectiveAddress =
+    user?.wallet?.address || resolvedAddress || inputAddress;
+
+  const resolveEns = async (input: string) => {
+    try {
+      if (input.endsWith(".eth")) {
+        // Use Ethereum mainnet provider specifically for ENS resolution
+        const mainnetProvider = new ethers.JsonRpcProvider(
+          process.env.NEXT_PUBLIC_MAINNET_RPC_URL
+        );
+        const address = await mainnetProvider.resolveName(input);
+        if (address) {
+          setResolvedAddress(address);
+          setInputAddress(address);
+          setError("");
+          return true;
+        } else {
+          setError("Could not resolve ENS name");
+          return false;
+        }
+      } else if (ethers.isAddress(input)) {
+        setResolvedAddress(input);
+        setInputAddress(input);
+        setError("");
+        return true;
+      } else {
+        setError("Invalid address or ENS name");
+        return false;
+      }
+    } catch (error) {
+      console.error("ENS resolution error:", error);
+      setError("Error resolving ENS name");
+      return false;
+    }
+  };
+
+  const handleAddressSubmit = async () => {
+    const isValid = await resolveEns(inputAddress);
+    if (isValid) {
+      setMintSuccess(false);
+      setTokenExists(false);
+      setTokenId(undefined);
+    }
+  };
 
   useEffect(() => {
     console.log("Product category:", product.category);
-    console.log("Product color:", decodedToken?.c);
+    console.log("Product color:", product.decodedToken?.c);
     // Don't run existence check right after minting
-    if (!decodedToken?.t || !contractAddress || isMinting) {
+    if (
+      !product.decodedToken?.t ||
+      !process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ||
+      isMinting
+    ) {
       return;
     }
 
@@ -204,12 +267,22 @@ export default function MintButton({ product }: MintButtonProps) {
         "function getTokenId(uint64 collection, uint64 serialNumber) public pure returns (uint256)",
       ];
 
+      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+      if (!contractAddress) {
+        throw new Error("Contract address not configured");
+      }
+
       const contract = new ethers.Contract(
         contractAddress,
         contractABI,
         provider
       );
-      const collectionName = decodedToken.t.toUpperCase();
+      if (!product.decodedToken) {
+        console.error("Decoded token is missing");
+        return;
+      }
+
+      const collectionName = product.decodedToken.t.toUpperCase();
 
       if (!(collectionName in CollectionId)) {
         console.error("Invalid collection name:", collectionName);
@@ -218,7 +291,7 @@ export default function MintButton({ product }: MintButtonProps) {
 
       const collectionId =
         CollectionId[collectionName as keyof typeof CollectionId];
-      const serialNumber = Number(decodedToken.n);
+      const serialNumber = Number(product.decodedToken.n);
 
       try {
         const exists = await contract.exists(collectionId, serialNumber);
@@ -234,13 +307,7 @@ export default function MintButton({ product }: MintButtonProps) {
     };
 
     setTimeout(checkExistence, delay);
-  }, [
-    contractAddress,
-    isMinting,
-    mintSuccess,
-    decodedToken?.t,
-    product.category,
-  ]);
+  }, [isMinting, mintSuccess, product.decodedToken, product.category]);
 
   useEffect(() => {
     if (mintSuccess && effectiveAddress) {
@@ -249,9 +316,13 @@ export default function MintButton({ product }: MintButtonProps) {
   }, [mintSuccess, effectiveAddress]);
 
   const handleMint = async () => {
-    if (!authenticated) {
-      login();
-      return;
+    // If no address is set and user is not authenticated, prompt for login
+    if (!effectiveAddress) {
+      if (!authenticated) {
+        login();
+        return;
+      }
+      throw new Error("No wallet address available");
     }
 
     setIsMinting(true);
@@ -289,25 +360,11 @@ export default function MintButton({ product }: MintButtonProps) {
     }
   };
 
-  const handleAddressSubmit = () => {
-    try {
-      if (ethers.isAddress(inputAddress)) {
-        setInputAddress("");
-        setError("");
-      } else {
-        setError("Please enter valid Ethereum address");
-      }
-    } catch {
-      setError("Please enter valid Ethereum address");
-    }
-  };
-
   const handleAddressClick = () => {
-    setMintSuccess(false);
-    setTokenExists(false);
+    // Reset states
+    setResolvedAddress("");
     setInputAddress("");
     setError("");
-    setTokenId(undefined);
   };
 
   if (!ready) {
@@ -321,7 +378,9 @@ export default function MintButton({ product }: MintButtonProps) {
     );
   }
 
-  const productName = decodedToken ? formatProductName(decodedToken.t) : "";
+  const productName = product.decodedToken
+    ? formatProductName(product.decodedToken.t)
+    : "";
 
   return (
     <div className="w-full min-h-[calc(100vh-4rem)] flex flex-col sm:justify-center">
@@ -333,8 +392,8 @@ export default function MintButton({ product }: MintButtonProps) {
               <ProductDetails
                 productName={productName}
                 productCategory={product.category}
-                productColor={decodedToken?.c ?? ""}
-                hideColor={decodedToken?.t === "CAMPLAMP"}
+                productColor={product.decodedToken?.c ?? ""}
+                hideColor={product.decodedToken?.t === "CAMPLAMP"}
               />
             </div>
           </div>
@@ -362,7 +421,7 @@ export default function MintButton({ product }: MintButtonProps) {
               </p>
               <TransactionLinks tokenId={tokenId} />
             </div>
-          ) : !authenticated ? (
+          ) : !authenticated && !resolvedAddress ? (
             <div className="w-full">
               <p className="w-full mb-2 text-sm sm:text-base">
                 Enter wallet address or connect to mint
@@ -376,6 +435,7 @@ export default function MintButton({ product }: MintButtonProps) {
                   }}
                   onSubmit={handleAddressSubmit}
                   error={error}
+                  resolvedAddress={resolvedAddress}
                 />
                 <p className="text-center">or</p>
                 <Button
@@ -389,7 +449,7 @@ export default function MintButton({ product }: MintButtonProps) {
             </div>
           ) : (
             <div className="w-full">
-              <p className="w-full font-medium mb-2 text-sm sm:text-base">
+              <p className="w-full mb-2 text-sm sm:text-base">
                 Mint to{" "}
                 <button
                   onClick={handleAddressClick}
