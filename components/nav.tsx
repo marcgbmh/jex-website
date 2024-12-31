@@ -12,7 +12,7 @@ export function Nav() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-background/80 backdrop-blur-sm">
       <div className="w-24">{/* Empty div to balance the layout */}</div>
-      <Link href="/" className="relative w-24 h-8">
+      <Link href="https://jex.us/" className="relative w-24 h-8">
         <Image
           src="/logo.png"
           alt="Logo"
