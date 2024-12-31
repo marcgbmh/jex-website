@@ -53,9 +53,7 @@ export async function POST(request: Request) {
 
     // Map collection and color names to their numeric values
     const collectionMap: { [key: string]: number } = {
-      HUGMUG: 0,
-      STRAPBOX: 1,
-      CAMPLAMP: 2,
+      CAMPLAMP: 0,
     };
 
     const colorMap: { [key: string]: { [key: string]: number } } = {
@@ -129,8 +127,15 @@ export async function POST(request: Request) {
     const receipt = await tx.wait();
     console.log("API: Transaction receipt:", receipt);
 
-    // Calculate tokenId
-    const tokenId = await contract.getTokenId(collection, serialNumber);
+    let tokenId;
+    try {
+      // Calculate tokenId
+      tokenId = await contract.getTokenId(collection, serialNumber);
+    } catch (error) {
+      console.error("API: Error getting tokenId:", error);
+      // If we can't get the tokenId, we can calculate it ourselves since it's a pure function
+      tokenId = BigInt(collection) * BigInt(2 ** 32) + BigInt(serialNumber);
+    }
 
     return NextResponse.json({
       success: true,

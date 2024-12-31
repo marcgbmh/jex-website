@@ -8,11 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 // Constants
-enum CollectionId {
-  HUGMUG = 0,
-  STRAPBOX = 1,
-  CAMPLAMP = 2,
-}
 
 // Types
 interface DecodedToken {
@@ -83,16 +78,55 @@ const ProductDetails = ({
   </div>
 );
 
-const TransactionLinks = ({ tokenId }: { tokenId?: string }) => {
+const TransactionLinks = ({ serialNumber }: { serialNumber?: number }) => {
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+  const [tokenId, setTokenId] = useState<string>();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTokenId = async () => {
+      try {
+        const response = await fetch(
+          `/api/token-id?serialNumber=${serialNumber}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setTokenId(data.tokenId);
+        }
+      } catch (error) {
+        console.error("Error fetching token ID:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (serialNumber) {
+      fetchTokenId();
+    } else {
+      setIsLoading(false);
+    }
+  }, [serialNumber]);
+
   if (!contractAddress) {
     throw new Error("Contract address not configured");
+  }
+
+  if (!serialNumber) {
+    return null;
+  }
+
+  if (isLoading) {
+    return <div className="text-sm text-gray-500">Loading links...</div>;
+  }
+
+  if (!tokenId) {
+    return null;
   }
 
   return (
     <div className="flex flex-col gap-2">
       <a
-        href={`https://opensea.io/assets/base/${contractAddress}/${tokenId}`}
+        href={`https://testnets.opensea.io/assets/base_sepolia/${contractAddress}/${tokenId}`}
         target="_blank"
         rel="noopener noreferrer"
         className="text-sm text-blue-600 hover:underline"
@@ -100,7 +134,7 @@ const TransactionLinks = ({ tokenId }: { tokenId?: string }) => {
         View on OpenSea
       </a>
       <a
-        href={`https://basescan.org/address/${contractAddress}`}
+        href={`https://sepolia.basescan.org/token/${contractAddress}?a=${tokenId}`}
         target="_blank"
         rel="noopener noreferrer"
         className="text-sm text-blue-600 hover:underline"
@@ -191,6 +225,7 @@ export default function MintButton({ product }: MintButtonProps) {
   const [mintSuccess, setMintSuccess] = useState(false);
   const [tokenId, setTokenId] = useState<string>();
   const [tokenExists, setTokenExists] = useState(false);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
   const { login, authenticated, ready, user } = usePrivy();
 
   console.log("User wallet:", user?.wallet?.address);
@@ -245,17 +280,15 @@ export default function MintButton({ product }: MintButtonProps) {
   useEffect(() => {
     console.log("Product category:", product.category);
     console.log("Product color:", product.decodedToken?.c);
-    // Don't run existence check right after minting
+
+    // Only run existence check on initial load
     if (
+      initialCheckDone ||
       !product.decodedToken?.t ||
-      !process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ||
-      isMinting
+      !process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
     ) {
       return;
     }
-
-    // Add a delay if we just completed minting
-    const delay = mintSuccess ? 2000 : 0;
 
     const checkExistence = async () => {
       const provider = new ethers.JsonRpcProvider(
@@ -282,32 +315,37 @@ export default function MintButton({ product }: MintButtonProps) {
         return;
       }
 
-      const collectionName = product.decodedToken.t.toUpperCase();
+      const collectionMap: { [key: string]: number } = {
+        CAMPLAMP: 0,
+      };
 
-      if (!(collectionName in CollectionId)) {
+      const collectionName = product.decodedToken.t.toUpperCase();
+      const collectionId = collectionMap[collectionName];
+
+      if (collectionId === undefined) {
         console.error("Invalid collection name:", collectionName);
         return;
       }
 
-      const collectionId =
-        CollectionId[collectionName as keyof typeof CollectionId];
       const serialNumber = Number(product.decodedToken.n);
 
       try {
         const exists = await contract.exists(collectionId, serialNumber);
-        if (exists && !mintSuccess) {
+        if (exists) {
           setTokenExists(true);
           const tokenId = await contract.getTokenId(collectionId, serialNumber);
           setTokenId(tokenId.toString());
           await contract.ownerOf(tokenId);
         }
+        setInitialCheckDone(true);
       } catch (error) {
         console.error(error);
+        setInitialCheckDone(true);
       }
     };
 
-    setTimeout(checkExistence, delay);
-  }, [isMinting, mintSuccess, product.decodedToken, product.category]);
+    checkExistence();
+  }, [product.decodedToken, initialCheckDone]);
 
   useEffect(() => {
     if (mintSuccess && effectiveAddress) {
@@ -343,18 +381,25 @@ export default function MintButton({ product }: MintButtonProps) {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to mint");
+        throw new Error(data.error || "Failed to mint");
       }
 
-      const { tokenId: newTokenId } = await response.json();
-      setTokenId(newTokenId);
+      setTokenId(data.tokenId);
       setMintSuccess(true);
       setTokenExists(true);
     } catch (error) {
       console.error("Mint error:", error);
-      setError(error instanceof Error ? error.message : "Failed to mint");
+      if (error instanceof Error) {
+        if (error.message.includes("already minted")) {
+          setTokenExists(true);
+        }
+        setError(error.message);
+      } else {
+        setError("Failed to mint");
+      }
     } finally {
       setIsMinting(false);
     }
@@ -386,7 +431,7 @@ export default function MintButton({ product }: MintButtonProps) {
     <div className="w-full min-h-[calc(100vh-4rem)] flex flex-col sm:justify-center">
       <div className="w-full flex-1 sm:flex-initial flex flex-col items-center justify-start sm:justify-center overflow-y-auto">
         <div className="w-full max-w-lg mx-auto p-4 sm:p-0">
-          <div className="w-full flex flex-col sm:flex-row sm:gap-8 items-start sm:items-center">
+          <div className="w-full flex flex-col sm:flex-row sm:gap-4 items-start sm:items-center">
             <ProductImage src={product.imageUrl} alt={productName} />
             <div className="w-full sm:w-auto">
               <ProductDetails
@@ -403,23 +448,25 @@ export default function MintButton({ product }: MintButtonProps) {
       <div className="w-full sticky bottom-0 bg-white p-4 sm:static shadow-t-sm border-t sm:border-0 sm:bg-transparent sm:p-0">
         <div className="w-full max-w-lg mx-auto">
           {mintSuccess ? (
-            <div className="w-full text-center">
-              <div className="w-full bg-green-50 p-4 sm:p-6 rounded-lg border border-green-200">
+            <div className="w-full">
+              <div className="w-full rounded-lg ">
                 <h3 className="font-medium text-lg sm:text-xl mb-2">
                   Congratulations!
                 </h3>
-                <p className="text-gray-700 mb-4 text-sm sm:text-base">
-                  Your object has been successfully minted.
+                <p className="mb-4 text-sm sm:text-base">
+                  Your {productName} has been minted to your wallet.
                 </p>
-                <TransactionLinks tokenId={tokenId} />
+                <TransactionLinks serialNumber={product.decodedToken?.n} />
               </div>
             </div>
-          ) : tokenExists ? (
+          ) : tokenExists && !mintSuccess ? (
             <div className="w-full">
-              <p className="w-full text-sm sm:text-base mb-2">
-                Object has been minted!
-              </p>
-              <TransactionLinks tokenId={tokenId} />
+              <div className="w-full rounded-lg ">
+                <p className="mb-4 text-sm sm:text-base">
+                  {productName} has been minted.
+                </p>
+                <TransactionLinks serialNumber={product.decodedToken?.n} />
+              </div>
             </div>
           ) : !authenticated && !resolvedAddress ? (
             <div className="w-full">
