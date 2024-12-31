@@ -23,30 +23,45 @@ export default function AccountPage() {
     const resolveEns = async () => {
       if (!walletAddress) return;
       try {
-        const provider = new JsonRpcProvider(
-          process.env.NEXT_PUBLIC_ETHEREUM_RPC_URL
+        console.log("Resolving ENS for address:", walletAddress);
+        const response = await fetch(
+          `/api/resolve-ens?address=${walletAddress}`
         );
-        const name = await provider.lookupAddress(walletAddress);
-        if (name) setEnsName(name);
+        const data = await response.json();
+        console.log("ENS lookup result:", data);
+        if (data.name) setEnsName(data.name);
       } catch (error) {
         console.error("Error resolving ENS:", error);
       }
     };
 
+    resolveEns();
+  }, [walletAddress]);
+
+  useEffect(() => {
     const fetchNFTs = async () => {
       if (!walletAddress) return;
       try {
-        // Replace with your Alchemy API endpoint and key from env vars
-        const response = await fetch(
-          `https://base-sepolia.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY}/getNFTs?owner=${walletAddress}&contractAddresses[]=${process.env.NEXT_PUBLIC_CONTRACT_ADDRESS}`
-        );
+        const response = await fetch(`/api/get-nfts?address=${walletAddress}`);
         const data = await response.json();
 
-        const formattedNFTs = data.ownedNfts.map((nft: any) => ({
-          title: nft.title,
-          tokenId: nft.tokenId,
-          imageUrl: nft.media[0]?.gateway || "/placeholder.png",
-        }));
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        console.log("NFT data from Alchemy:", data.ownedNfts[0]);
+
+        const formattedNFTs = data.ownedNfts.map(
+          (nft: {
+            title: string;
+            id: { tokenId: string };
+            media: Array<{ gateway: string }>;
+          }) => ({
+            title: nft.title,
+            tokenId: parseInt(nft.id.tokenId, 16).toString(),
+            imageUrl: nft.media[0]?.gateway || "/placeholder.png",
+          })
+        );
 
         setNfts(formattedNFTs);
       } catch (error) {
@@ -56,7 +71,6 @@ export default function AccountPage() {
       }
     };
 
-    resolveEns();
     fetchNFTs();
   }, [walletAddress]);
 
@@ -66,43 +80,47 @@ export default function AccountPage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col p-4 bg-background">
+    <main className="flex min-h-screen flex-col mt-8 p-4 bg-background">
       <h1 className="text-3xl font-bold text-center mb-4">
         {ensName || formatAddress(walletAddress)}
       </h1>
       <p className="text-center mb-16 text-gray-500">
         {ensName && formatAddress(walletAddress)}
       </p>
-
       {loading ? (
         <div className="text-center">Loading NFTs...</div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto px-4">
+        <div className="grid grid-cols-1 gap-8 max-w-6xl mx-auto px-4">
           {nfts.length > 0 ? (
-            nfts.map((nft, index) => (
+            nfts.map((nft) => (
               <div
-                key={nft.tokenId}
-                className="bg-gray-100 rounded-lg overflow-hidden"
+                key={`${nft.tokenId}-${nft.title}`}
+                className="overflow-hidden"
               >
-                <div className="aspect-square relative">
-                  <Image
-                    src={nft.imageUrl}
-                    alt={nft.title}
-                    fill
-                    className="object-cover"
-                  />
+                <div className="aspect-square relative w-80">
+                  <a
+                    href={`https://testnets.opensea.io/assets/base_sepolia/${process.env.NEXT_PUBLIC_CONTRACT_ADDRESS}/${nft.tokenId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cursor-pointer"
+                  >
+                    <Image
+                      src={nft.imageUrl}
+                      alt={nft.title}
+                      priority={true}
+                      fill
+                      className="object-cover"
+                    />
+                  </a>
                 </div>
-                <div className="p-4">
+                <div className="pt-2">
                   <h3 className="font-semibold">{nft.title}</h3>
-                  <p className="text-sm text-gray-500">
-                    Token ID: {nft.tokenId}
-                  </p>
                 </div>
               </div>
             ))
           ) : (
             <div className="col-span-full text-center text-gray-500">
-              No NFTs found for this collection
+              No JEX NFTs owned yet
             </div>
           )}
         </div>
