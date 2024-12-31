@@ -11,6 +11,16 @@ const nextConfig = {
   // Disable some optimizations temporarily for debugging
   optimizeFonts: false,
   poweredByHeader: false,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ipfs.io',
+        port: '',
+        pathname: '/ipfs/**',
+      },
+    ],
+  },
 }
 
 module.exports = nextConfig
