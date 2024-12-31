@@ -223,7 +223,6 @@ export default function MintButton({ product }: MintButtonProps) {
   const [resolvedAddress, setResolvedAddress] = useState("");
   const [error, setError] = useState("");
   const [mintSuccess, setMintSuccess] = useState(false);
-  const [tokenId, setTokenId] = useState<string>();
   const [tokenExists, setTokenExists] = useState(false);
   const [initialCheckDone, setInitialCheckDone] = useState(false);
   const { login, authenticated, ready, user } = usePrivy();
@@ -273,7 +272,6 @@ export default function MintButton({ product }: MintButtonProps) {
     if (isValid) {
       setMintSuccess(false);
       setTokenExists(false);
-      setTokenId(undefined);
     }
   };
 
@@ -333,9 +331,6 @@ export default function MintButton({ product }: MintButtonProps) {
         const exists = await contract.exists(collectionId, serialNumber);
         if (exists) {
           setTokenExists(true);
-          const tokenId = await contract.getTokenId(collectionId, serialNumber);
-          setTokenId(tokenId.toString());
-          await contract.ownerOf(tokenId);
         }
         setInitialCheckDone(true);
       } catch (error) {
@@ -345,7 +340,7 @@ export default function MintButton({ product }: MintButtonProps) {
     };
 
     checkExistence();
-  }, [product.decodedToken, initialCheckDone]);
+  }, [product.decodedToken, initialCheckDone, product.category]);
 
   useEffect(() => {
     if (mintSuccess && effectiveAddress) {
@@ -387,7 +382,6 @@ export default function MintButton({ product }: MintButtonProps) {
         throw new Error(data.error || "Failed to mint");
       }
 
-      setTokenId(data.tokenId);
       setMintSuccess(true);
       setTokenExists(true);
     } catch (error) {
