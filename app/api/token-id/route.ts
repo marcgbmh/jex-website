@@ -1,4 +1,18 @@
-import { NextResponse } from "next/server";
+interface NFTAttribute {
+  trait_type: string;
+  value: string | number;
+}
+
+interface NFTMetadata {
+  attributes?: NFTAttribute[];
+}
+
+interface NFT {
+  raw: {
+    metadata?: NFTMetadata;
+  };
+  tokenId: string;
+}
 
 async function getNFTsForContract(contractAddress: string) {
   const baseURL = "https://base-sepolia.g.alchemy.com/nft/v3";
@@ -35,13 +49,14 @@ export async function GET(request: Request) {
     }
 
     const nftsData = await getNFTsForContract(contractAddress);
-    
+
     // Find the NFT with matching serial number in traits
-    const matchingNFT = nftsData.nfts.find((nft: any) => {
+    const matchingNFT = nftsData.nfts.find((nft: NFT) => {
       const traits = nft.raw.metadata?.attributes || [];
-      return traits.some((trait: any) => 
-        trait.trait_type.toLowerCase() === "number" && 
-        trait.value.toString() === serialNumber
+      return traits.some(
+        (trait: NFTAttribute) =>
+          trait.trait_type.toLowerCase() === "number" &&
+          trait.value.toString() === serialNumber
       );
     });
 
